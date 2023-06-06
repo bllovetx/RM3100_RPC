@@ -15,6 +15,9 @@ msg_is_of = b'\x81'
 msg_clear_of = b'\x82'
 msg_clear_buffer = b'\x83'
 
+class LockException(Exception):
+    def __init__(self):
+        super().__init__("Failed to aquire lock")
 
 class Rm3100Server:
     def __init__(self) -> None:
@@ -26,7 +29,7 @@ class Rm3100Server:
                 self._dev.detach_kernel_driver(1)
             except usb.core.USBError as e:
                 print("Could not detatch kernel driver from interface({0}): {1}".format(1, str(e)))
-                # TODO: raise
+                raise Exception
         # init usb connect
         self._dev.set_configuration()
         # init data queue
@@ -51,8 +54,7 @@ class Rm3100Server:
 
     def _transfer(self, msg, ret):
         if not self._dev_lock.acquire(timeout=1): # sec
-            assert False, "Failed to acquire lock"
-            # TODO: raise lock exception
+            raise LockException
         try:
             self._dev.write(w_end, msg, rw_timeout)
             res = self._dev.read(r_end, ret, rw_timeout)
@@ -65,22 +67,20 @@ class Rm3100Server:
             self._dev_lock.release()
             res = self._transfer(msg, ret)
             return res
-            # TODO: timeout? raise transfer error?
         self._dev_lock.release()
         return res
     
     def _write(self, msg):
         assert False, "_write is not tested!"
         if not self._dev_lock.acquire(timeout=1): # sec
-            assert False, "Failed to acquire lock"
-            # TODO: raise lock exception
+            raise LockException
         try:
             self._dev.write(w_end, msg, rw_timeout)
         except KeyboardInterrupt:
             raise KeyboardInterrupt
         except Exception as e:
             print(e)
-            # TODO: timeout? raise write error?
+            # timeout? raise write error?
         self._dev_lock.release()
 
     def _read_mag(self) -> bool:
