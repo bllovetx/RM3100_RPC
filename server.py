@@ -1,4 +1,4 @@
-# from sipyco.pc_rpc import simple_server_loop
+from sipyco.pc_rpc import simple_server_loop
 from queue import Queue
 import threading
 import usb.core
@@ -40,9 +40,10 @@ class Rm3100Server:
         self._connect()
 
     def _connect(self) -> None:
-        print("connecting...")
-        self.is_overflow()
-        print("connected!")
+        print("Connecting...")
+        self._is_overflow()
+        print("Connected!")
+
 
     def close(self) -> None:
         self.stop_acquisition()
@@ -52,45 +53,24 @@ class Rm3100Server:
         if not self._dev_lock.acquire(timeout=1): # sec
             assert False, "Failed to acquire lock"
             # TODO: raise lock exception
-        res = None
         try:
             self._dev.write(w_end, msg, rw_timeout)
             res = self._dev.read(r_end, ret, rw_timeout)
         except KeyboardInterrupt:
             raise KeyboardInterrupt
         except Exception as e:
-            print(e)
+            # timeout
+            # somehow first few transfer will be omitted, repeat try will fix this. This is supposed only happen during self._connect()
+            print(e) 
             self._dev_lock.release()
             res = self._transfer(msg, ret)
             return res
             # TODO: timeout? raise transfer error?
         self._dev_lock.release()
         return res
-
-    # # TEST TIMEOUT PROBLEM
-    # def _transfer(self, msg, ret):
-    #     if not self._dev_lock.acquire(timeout=1): # sec
-    #         assert False, "Failed to acquire lock"
-    #         # TODO: raise lock exception
-    #     res = None
-    #     try:
-    #         self._dev.write(w_end, msg, rw_timeout)
-    #     except KeyboardInterrupt:
-    #         raise KeyboardInterrupt
-    #     except Exception as e:
-    #         print("during write:", e)
-    #         # TODO: timeout? raise transfer error?
-    #     try:
-    #         res = self._dev.read(r_end, ret, rw_timeout)
-    #     except KeyboardInterrupt:
-    #         raise KeyboardInterrupt
-    #     except Exception as e:
-    #         print("during read:", e)
-    #         # TODO: timeout? raise transfer error?
-    #     self._dev_lock.release()
-    #     return res
     
     def _write(self, msg):
+        assert False, "_write is not tested!"
         if not self._dev_lock.acquire(timeout=1): # sec
             assert False, "Failed to acquire lock"
             # TODO: raise lock exception
@@ -107,28 +87,28 @@ class Rm3100Server:
         bytes = self._transfer(msg_read, 5)
         if bytes[0]:
             self._data.put_nowait(
-                int.from_bytes(bytes[1:5], byteorder="big", signed=True)
+                int.from_bytes(bytes[1:5], "big", True)
             )
         return bytes[0]
     
-    def is_overflow(self) -> bool:
-        return self._transfer(msg_is_of, 1)[0]
+    def _is_overflow(self) -> bool:
+        return self._transfer(msg_is_of, 1)
     
-    def clear_buffer(self) -> bool:
-        return self._transfer(msg_clear_buffer, 1)[0]
+    def _clear_buffer(self) -> bool:
+        return self._transfer(msg_clear_buffer, 1)
 
-    def clear_overflow(self) -> bool:
-        return self._transfer(msg_clear_of, 1)[0]
+    def _clear_overflow(self) -> bool:
+        return self._transfer(msg_clear_of, 1)
 
     def _watcher(self):
         # clear
         self._data.queue.clear()
-        self.clear_buffer()
-        self.clear_overflow()
+        self._clear_buffer()
+        self._clear_overflow()
         # loop read
         while not self._watcher_stop.wait(read_interval):
             self._read_mag()
-        print("has overflow" if self.is_overflow() else "no overflow")
+        print("Warning: has overflow!" if self._is_overflow() else "no overflow")
 
     def start_acquisition(self):
         self._watcher_stop.clear()
@@ -158,26 +138,16 @@ class Rm3100Server:
         # print(temp)
         return temp
 
-# try:  
-#     rm3100_server = Rm3100Server()
+try:  
+    rm3100_server = Rm3100Server()
 
-#     simple_server_loop(
-#         {"rm3100_server": rm3100_server},
-#         # TODO: "ip", "port"
-#         "192.168.50.81", 41103
-#     )
-# except Exception as e:
-#     rm3100_server.close()
-#     print(e)
-
-rm3100_server = Rm3100Server()
-rm3100_server.is_overflow()
-rm3100_server.start_acquisition()
-time.sleep(2)
-print(rm3100_server.is_overflow())
-rm3100_server.stop_acquisition()
-time.sleep(2)
-print(rm3100_server.is_overflow())
-rm3100_server.close()
+    simple_server_loop(
+        {"rm3100_server": rm3100_server},
+        # TODO: "ip", "port"
+        "192.168.50.81", 41103
+    )
+except Exception as e:
+    rm3100_server.close()
+    print(e)
 
 
